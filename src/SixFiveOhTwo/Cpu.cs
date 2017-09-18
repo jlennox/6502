@@ -272,7 +272,6 @@ namespace SixFiveOhTwo
 
         private readonly byte* _constantValues;
 
-        private byte* _memory;
         public byte* Memory;
 
         private const int _opcodeMask = 0b111_000_00;
