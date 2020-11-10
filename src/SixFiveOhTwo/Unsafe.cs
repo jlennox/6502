@@ -37,6 +37,20 @@ namespace SixFiveOhTwo
 
             return buffer;
         }
+
+        public static byte* Allocate<T>()
+            where T : struct
+        {
+            var regSize = Marshal.SizeOf<T>();
+            var ptr = (byte*)Marshal.AllocHGlobal(regSize);
+
+            for (var i = 0; i < regSize; ++i)
+            {
+                ptr[i] = 0;
+            }
+
+            return ptr;
+        }
     }
 
     /*public unsafe class UnsafeBuffer : IDisposable

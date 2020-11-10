@@ -150,7 +150,7 @@ namespace SixFiveOhTwo.Tests
         {
             SetupLogging();
 
-            Cpu.Trace = true;
+            //Cpu.Trace = true;
 
             var cpu = new Cpu();
             cpu.Rom = ReadRom();

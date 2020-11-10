@@ -257,13 +257,7 @@ namespace SixFiveOhTwo
                 _constantValues[i] = (byte)i;
             }
 
-            var regSize = Marshal.SizeOf<Registers>();
-            _registersPtr = (Registers*)Marshal.AllocHGlobal(regSize);
-
-            for (var i = 0; i < regSize; ++i)
-            {
-                ((byte*)_registersPtr)[i] = 0;
-            }
+            _registersPtr = (Registers*)Unsafe.Allocate<Registers>();
 
             _aPtr = &_registersPtr->Accumulator;
             _xPtr = &_registersPtr->IndexX;
