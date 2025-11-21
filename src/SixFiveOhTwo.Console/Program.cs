@@ -1,14 +1,13 @@
 ﻿using System;
 using SixFiveOhTwo.Tests;
 
-namespace SixFiveOhTwo.Console
+namespace SixFiveOhTwo.Console;
+
+internal class Program
 {
-    class Program
+    private static void Main(string[] args)
     {
-        static void Main(string[] args)
-        {
-            var test = new NesLogTest();
-            test.VerifyLogState();
-        }
+        var test = new NesLogTest();
+        test.VerifyLogState();
     }
 }
