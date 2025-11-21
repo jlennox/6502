@@ -5,6 +5,13 @@ using NLog;
 
 namespace SixFiveOhTwo;
 
+// Some notes:
+// * `if (Trace)` is always outside the "Log" call. This way the string concatenation allocation only happens if
+//    tracing is enabled, instead of always happening then being silently discarded when disabled.
+//    Could be improved with `InterpolatedStringHandlerArgumentAttribute`?
+// * The excessive `[MethodImpl(MethodImplOptions.AggressiveInlining)]` usage was from an earlier version of .net
+//   where it was very bad about inlining properties. It's worth testing if that's still the case.
+
 [StructLayout(LayoutKind.Explicit)]
 internal struct Registers
 {
@@ -376,16 +383,10 @@ public unsafe class Cpu
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private byte GetImmediate8()
-    {
-        return ReadMemory(_pc + 1);
-    }
+    private byte GetImmediate8() => ReadMemory(_pc + 1);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ushort GetImmediate16()
-    {
-        return (ushort)(ReadMemory(_pc + 1) | (ReadMemory(_pc + 2) << 8));
-    }
+    private ushort GetImmediate16() => (ushort)(ReadMemory(_pc + 1) | (ReadMemory(_pc + 2) << 8));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string ProcessStatusDescription(byte pc)
@@ -401,10 +402,7 @@ public unsafe class Cpu
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private string ProcessStatusDescription()
-    {
-        return ProcessStatusDescription(_ps);
-    }
+    private string ProcessStatusDescription() => ProcessStatusDescription(_ps);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Log(string s)
@@ -451,53 +449,32 @@ public unsafe class Cpu
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemory(byte* memory, ushort addr)
     {
-        if (Trace && memory == Memory)
-        {
-            Log($"ReadMemory({addr:X4}) = {memory[addr]:X2}");
-        }
+        if (Trace && memory == Memory) Log($"ReadMemory({addr:X4}) = {memory[addr]:X2}");
 
         return ReadMemoryUnlogged(memory, addr);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public byte ReadMemory(ushort addr)
-    {
-        return ReadMemory(Memory, addr);
-    }
+    public byte ReadMemory(ushort addr) => ReadMemory(Memory, addr);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public byte ReadMemoryUnlogged(ushort addr)
-    {
-        return ReadMemoryUnlogged(Memory, addr);
-    }
+    public byte ReadMemoryUnlogged(ushort addr) => ReadMemoryUnlogged(Memory, addr);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private byte ReadMemory(int addr)
-    {
-        return ReadMemory((ushort)addr);
-    }
+    private byte ReadMemory(int addr) => ReadMemory((ushort)addr);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void WriteMemory(byte* memory, ushort addr, byte value)
     {
-        if (memory == _constantValues)
-        {
-            throw new Exception();
-        }
+        if (memory == _constantValues) throw new Exception();
 
-        if (Trace && memory == Memory)
-        {
-            Log($"WriteMemory({addr:X4}, {value:X2}) (was {memory[addr]:X2})");
-        }
+        if (Trace && memory == Memory) Log($"WriteMemory({addr:X4}, {value:X2}) (was {memory[addr]:X2})");
 
         memory[addr] = value;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void WriteMemory(ushort addr, byte value)
-    {
-        WriteMemory(Memory, addr, value);
-    }
+    private void WriteMemory(ushort addr, byte value) => WriteMemory(Memory, addr, value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int ConditionalRelativeJump(bool condition)
@@ -527,10 +504,7 @@ public unsafe class Cpu
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void InvalidOpcode(byte opcode)
     {
-        if (Trace)
-        {
-            Log($"InvalidOpcode({opcode:X2})");
-        }
+        if (Trace) Log($"InvalidOpcode({opcode:X2})");
     }
 
     public void Execute(out int ticks)
@@ -538,10 +512,7 @@ public unsafe class Cpu
         ticks = 0;
         var opcode = ReadMemory(ProgramCounter);
 
-        if (Trace)
-        {
-            Log($"Execute({opcode:X2})");
-        }
+        if (Trace) Log($"Execute({opcode:X2})");
 
         switch (opcode)
         {
