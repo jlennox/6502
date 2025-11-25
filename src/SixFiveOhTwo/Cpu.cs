@@ -3,6 +3,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using NLog;
 
+[assembly: InternalsVisibleTo("SixFiveOhTwo.Tests")]
+
 namespace SixFiveOhTwo;
 
 // Some notes:
@@ -23,7 +25,7 @@ internal struct Registers
     public byte IndexY;
 }
 
-public unsafe class Cpu
+public unsafe class Cpu : IDisposable
 {
     public static bool Trace { get; set; }
 
@@ -237,8 +239,14 @@ public unsafe class Cpu
     private readonly NesRom _rom;
     private readonly byte* _prgRom;
     private readonly int _prgRomSize;
-
     #endregion
+
+    public byte* Memory;
+    private readonly byte* _constantValues;
+
+    private const int _opcodeMask = 0b111_000_00;
+
+    private bool _hasDisposed = false;
 
     public Cpu(NesRom rom)
     {
@@ -264,11 +272,16 @@ public unsafe class Cpu
         _yPtr = &_registersPtr->IndexY;
     }
 
-    private readonly byte* _constantValues;
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _hasDisposed, true)) return;
 
-    public byte* Memory;
-
-    private const int _opcodeMask = 0b111_000_00;
+        // TODO: A bit more safety on these.
+        Marshal.FreeHGlobal((IntPtr)_prgRom);
+        Marshal.FreeHGlobal((IntPtr)Memory);
+        Marshal.FreeHGlobal((IntPtr)_constantValues);
+        Marshal.FreeHGlobal((IntPtr)_registersPtr);
+    }
 
     private bool GetPtr(
         byte opcode,
@@ -434,13 +447,15 @@ public unsafe class Cpu
             return CartSram;
         }
         else*/
-        if (addr >= 0x8000 && addr <= 0xFFFF)
+        if (addr is >= 0x8000 and <= 0xFFFF)
         {
             var prgMemory = _prgRom;
-            if (prgMemory == null)
-            {
+            if (prgMemory == null) throw new Exception();
 
-            }
+            // This behavior is mapper dependent, but most behave that the PRG is mirrored for the PRG address space
+            // if it does not fill the full 32kb. Mirroring simulated with the modulus operation.
+            var prgAddress = (addr - 0x8000) % _prgRomSize;
+            return prgMemory[prgAddress];
         }
 
         return memory[addr];
@@ -458,7 +473,7 @@ public unsafe class Cpu
     public byte ReadMemory(ushort addr) => ReadMemory(Memory, addr);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public byte ReadMemoryUnlogged(ushort addr) => ReadMemoryUnlogged(Memory, addr);
+    internal byte ReadMemoryUnlogged(ushort addr) => ReadMemoryUnlogged(Memory, addr);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemory(int addr) => ReadMemory((ushort)addr);

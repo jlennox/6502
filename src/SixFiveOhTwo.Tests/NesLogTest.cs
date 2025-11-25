@@ -28,7 +28,7 @@ public class NesLogTest
 
     private static Stream EmbeddedResource(string filename)
     {
-        var assembly = typeof(NesLogTest).GetTypeInfo().Assembly;
+        var assembly = typeof(NesLogTest).Assembly;
         var resourceName = assembly.GetManifestResourceNames()
             .FirstOrDefault(t => t.EndsWith(filename))
             ?? throw new Exception($"Unable to locate EmbeddedResource by name \"{filename}\"");
@@ -91,10 +91,10 @@ public class NesLogTest
 
     private static State[] LoadLog(Cpu cpu)
     {
-        var stateList = new List<State>();
         var logText = ReadLog();
+        var stateList = new List<State>(logText.Length);
 
-        //                      1       2                   3                             4+
+        //                      1       2                      3                           4+
         var exp = new Regex(@"^(....)  (.. .. ..) [\s\*].+?\$?([\dA-Fa-f]{2,4} = ..)?\s+A:(..) X:(..) Y:(..) P:(..) SP:(..) CYC:\s*(\d+)  .+$", RegexOptions.Multiline);
 
         foreach (var line in logText)
@@ -105,8 +105,8 @@ public class NesLogTest
 
             var addr = (ushort)Convert.ToInt16(match.Groups[1].Value, 16);
 
-            var bytes = match.Groups[2].Value.Split(
-                    new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+            var bytes = match.Groups[2].Value
+                .Split([' '], StringSplitOptions.RemoveEmptyEntries)
                 .Select(b => Convert.ToByte(b, 16)).ToArray();
 
             var stateStart = 4;
@@ -147,7 +147,7 @@ public class NesLogTest
 
         // Cpu.Trace = true;
 
-        var cpu = new Cpu(ReadRom());
+        using var cpu = new Cpu(ReadRom());
         var states = LoadLog(cpu);
 
         foreach (var state in states)
@@ -157,8 +157,9 @@ public class NesLogTest
             var addr = state.PC;
             foreach (var b in state.Bytes)
             {
-                var b2 = cpu.ReadMemoryUnlogged(addr++);
-                Assert.AreEqual(b, b2, $"Mismatched bytes at {addr:X4}");
+                var b2 = cpu.ReadMemoryUnlogged(addr);
+                Assert.AreEqual(b, b2, $"Mismatched memory at {addr:X4}");
+                addr++;
             }
         }
 
@@ -167,6 +168,8 @@ public class NesLogTest
         var count = 0;
         State? lastState = null;
 
+        // NOTE: This is expected to execute successfully until it hits NES specific hardware.
+        // The first of which is: STA $4015 = FF
         foreach (var state in states)
         {
             state.AssertState(cpu, lastState?.FullText);
