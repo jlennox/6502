@@ -11,8 +11,6 @@ namespace SixFiveOhTwo;
 // * `if (Trace)` is always outside the "Log" call. This way the string concatenation allocation only happens if
 //    tracing is enabled, instead of always happening then being silently discarded when disabled.
 //    Could be improved with `InterpolatedStringHandlerArgumentAttribute`?
-// * The excessive `[MethodImpl(MethodImplOptions.AggressiveInlining)]` usage was from an earlier version of .net
-//   where it was very bad about inlining properties. It's worth testing if that's still the case.
 
 internal struct Registers
 {
@@ -35,15 +33,11 @@ public sealed unsafe class Cpu : IDisposable
     private readonly byte* _aPtr;
     private readonly byte* _xPtr;
     private readonly byte* _yPtr;
-    private ushort _pc;
-    private byte _sp;
     private byte _ps;
 
     public byte Accumulator
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _registersPtr->Accumulator;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
             _registersPtr->Accumulator = value;
@@ -52,29 +46,13 @@ public sealed unsafe class Cpu : IDisposable
         }
     }
 
-    public int AccumulatorWithCarry
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Accumulator + CarryValue;
-    }
-
-    public int CarryValue
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => CarryFlag ? 1 : 0;
-    }
-
-    public int CarryValueHigh
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => CarryFlag ? 0x80 : 0;
-    }
+    public int AccumulatorWithCarry => Accumulator + CarryValue;
+    public int CarryValue => CarryFlag ? 1 : 0;
+    public int CarryValueHigh => CarryFlag ? 0x80 : 0;
 
     public byte IndexX
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _registersPtr->IndexX;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
             _registersPtr->IndexX = value;
@@ -85,9 +63,7 @@ public sealed unsafe class Cpu : IDisposable
 
     public byte IndexY
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _registersPtr->IndexY;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
             _registersPtr->IndexY = value;
@@ -96,33 +72,14 @@ public sealed unsafe class Cpu : IDisposable
         }
     }
 
-    public ushort ProgramCounter
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _pc;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        set => _pc = value;
-    }
+    public ushort ProgramCounter { get; set; }
+    public byte StackPointer { get; set; }
 
-    public byte StackPointer
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _sp;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        set => _sp = value;
-    }
-
-    private ushort StackPointerAbsolute
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => (ushort)(_sp | 0x0100);
-    }
+    private ushort StackPointerAbsolute => (ushort)(StackPointer | 0x0100);
 
     public byte ProcessorStatus
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _ps;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => _ps = (byte)(value | _unusedFlag);
     }
     #endregion
@@ -137,10 +94,8 @@ public sealed unsafe class Cpu : IDisposable
     private const byte _overflowFlag = 1 << 6;
     private const byte _negativeFlag = 1 << 7;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool GetFlag(byte flag) => (ProcessorStatus & flag) == flag;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SetFlag(byte flag, bool set)
     {
         ProcessorStatus = set
@@ -150,83 +105,64 @@ public sealed unsafe class Cpu : IDisposable
 
     public bool CarryFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => GetFlag(_carryFlag);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => SetFlag(_carryFlag, value);
     }
 
     public bool ZeroFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => GetFlag(_zeroFlag);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => SetFlag(_zeroFlag, value);
     }
 
     public bool IrqDisableFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => GetFlag(_irqDisableFlag);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => SetFlag(_irqDisableFlag, value);
     }
 
     public bool DecimalModeFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => GetFlag(_decimalModeFlag);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => SetFlag(_decimalModeFlag, value);
     }
 
     public bool BreakFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => GetFlag(_breakFlag);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => SetFlag(_breakFlag, value);
     }
 
     public bool UnusedFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => true;
 
         // TODO JOE 11/2025: Hmmm :) Check the docs if not using `value` is actually correct.
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ProcessorStatus |= _unusedFlag;
     }
 
     public bool OverflowFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => GetFlag(_overflowFlag);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => SetFlag(_overflowFlag, value);
     }
 
     public bool NegativeFlag
     {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => GetFlag(_negativeFlag);
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => SetFlag(_negativeFlag, value);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SetZeroFlag(byte value)
     {
         ZeroFlag = value == 0;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SetNegativeFlag(byte diff)
     {
         NegativeFlag = (diff & 0b1000_0000) != 0;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SetOverflowFlag(byte diff)
     {
         OverflowFlag = (diff & 0b0100_0000) != 0;
@@ -305,7 +241,7 @@ public sealed unsafe class Cpu : IDisposable
                 var srcPtr = (ushort)((GetImmediate8() + IndexX) & 0xFF);
                 ptr = ReadMemory(srcPtr);
                 ptr |= (ushort)(ReadMemory((byte)(srcPtr + 1)) << 8);
-                _pc += 2;
+                ProgramCounter += 2;
                 break;
             }
             case 0b000_001_00: // [nn]
@@ -314,7 +250,7 @@ public sealed unsafe class Cpu : IDisposable
             case 0b000_001_11: // [nn]
                 memory = _memory;
                 ptr = GetImmediate8();
-                _pc += 2;
+                ProgramCounter += 2;
                 break;
             case 0b000_000_00: // nn
             case 0b000_010_01: // nn
@@ -324,7 +260,7 @@ public sealed unsafe class Cpu : IDisposable
 
                 memory = _constantValues;
                 ptr = GetImmediate8();
-                _pc += 2;
+                ProgramCounter += 2;
                 break;
             case 0b000_011_00: // [nnnn]
             case 0b000_011_01: // [nnnn]
@@ -332,7 +268,7 @@ public sealed unsafe class Cpu : IDisposable
             case 0b000_011_11: // [nnnn]
                 memory = _memory;
                 ptr = GetImmediate16();
-                _pc += 3;
+                ProgramCounter += 3;
                 break;
             case 0b000_100_01:
             case 0b000_100_11: { // [WORD[nn]+Y]
@@ -341,7 +277,7 @@ public sealed unsafe class Cpu : IDisposable
                 ptr = ReadMemory(srcPtr);
                 ptr |= (ushort)(ReadMemory((byte)(srcPtr + 1)) << 8);
                 ptr += IndexY;
-                _pc += 2;
+                ProgramCounter += 2;
                 break;
             }
             case 0b000_101_00: // [nn+X]
@@ -350,14 +286,14 @@ public sealed unsafe class Cpu : IDisposable
             case 0b000_101_11: // [nn+X]
                 memory = _memory;
                 ptr = (byte)((GetImmediate8() + switchingIndex) & 0xFF);
-                _pc += 2;
+                ProgramCounter += 2;
                 break;
             case 0b000_110_01:
             case 0b000_110_11:// [nnnn+Y]
                 memory = _memory;
                 ptr = GetImmediate16();
                 ptr = (ushort)((ptr + IndexY) & 0xFFFF);
-                _pc += 3;
+                ProgramCounter += 3;
                 break;
             case 0b000_111_00: // [nnnn+X]
             case 0b000_111_01: // [nnnn+X]
@@ -366,12 +302,12 @@ public sealed unsafe class Cpu : IDisposable
                 memory = _memory;
                 ptr = GetImmediate16();
                 ptr = (ushort)((ptr + switchingIndex) & 0xFFFF);
-                _pc += 3;
+                ProgramCounter += 3;
                 break;
             case 0b000_010_10: // A
                 ptr = 0;
                 memory = _aPtr;
-                ++_pc;
+                ++ProgramCounter;
                 break;
             case 0b000_010_00:
             case 0b000_100_00:
@@ -387,13 +323,10 @@ public sealed unsafe class Cpu : IDisposable
         return true;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private byte GetImmediate8() => ReadMemory(_pc + 1);
+    private byte GetImmediate8() => ReadMemory(ProgramCounter + 1);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ushort GetImmediate16() => (ushort)(ReadMemory(_pc + 1) | (ReadMemory(_pc + 2) << 8));
+    private ushort GetImmediate16() => (ushort)(ReadMemory(ProgramCounter + 1) | (ReadMemory(ProgramCounter + 2) << 8));
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string ProcessStatusDescription(byte pc)
     {
         return ((pc & _carryFlag) != 0 ? "C" : " ") +
@@ -406,16 +339,13 @@ public sealed unsafe class Cpu : IDisposable
             ((pc & _negativeFlag) != 0 ? "N" : " ");
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private string ProcessStatusDescription() => ProcessStatusDescription(_ps);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Log(string s)
     {
-        _log.Debug($"{ProgramCounter:X4} A:{Accumulator:X2} X:{IndexX:X2} Y:{IndexY:X2} P:{_ps:X2} ({ProcessStatusDescription()}) SP:{_sp:X2} " + s);
+        _log.Debug($"{ProgramCounter:X4} A:{Accumulator:X2} X:{IndexX:X2} Y:{IndexY:X2} P:{_ps:X2} ({ProcessStatusDescription()}) SP:{StackPointer:X2} " + s);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemoryUnlogged(byte* memory, ushort addr)
     {
         if (_prg.TryRead(addr, out var result)) return result;
@@ -423,7 +353,6 @@ public sealed unsafe class Cpu : IDisposable
         return memory[addr];
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemory(byte* memory, ushort addr)
     {
         if (Trace && memory == _memory) Log($"ReadMemory({addr:X4}) = {memory[addr]:X2}");
@@ -431,16 +360,12 @@ public sealed unsafe class Cpu : IDisposable
         return ReadMemoryUnlogged(memory, addr);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte ReadMemory(ushort addr) => ReadMemory(_memory, addr);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal byte ReadMemoryUnlogged(ushort addr) => ReadMemoryUnlogged(_memory, addr);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemory(int addr) => ReadMemory((ushort)addr);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void WriteMemory(byte* memory, ushort addr, byte value)
     {
         if (memory == _constantValues) throw new Exception();
@@ -450,25 +375,22 @@ public sealed unsafe class Cpu : IDisposable
         memory[addr] = value;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void WriteMemory(ushort addr, byte value) => WriteMemory(_memory, addr, value);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int ConditionalRelativeJump(bool condition)
     {
         if (!condition)
         {
-            _pc += 2;
+            ProgramCounter += 2;
             return 2;
         }
 
         var oldPc = ProgramCounter;
         var relative = GetImmediate8();
-        _pc = (ushort)(_pc + (sbyte)relative + 2);
+        ProgramCounter = (ushort)(ProgramCounter + (sbyte)relative + 2);
         return (oldPc & 0xFF00) == (ProgramCounter & 0xFF00) ? 3 : 4;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Compare(byte* memory, ushort ptr, byte register)
     {
         var val = ReadMemory(memory, ptr);
@@ -478,7 +400,6 @@ public sealed unsafe class Cpu : IDisposable
         CarryFlag = diff >= 0;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void InvalidOpcode(byte opcode)
     {
         if (Trace) Log($"InvalidOpcode({opcode:X2})");
@@ -535,62 +456,62 @@ public sealed unsafe class Cpu : IDisposable
                 ++StackPointer;
                 var pch = ReadMemory(StackPointerAbsolute);
                 ProgramCounter = (ushort)(pcl | (pch << 8));
-                ++_pc;
+                ++ProgramCounter;
                 return;
             }
             case 0b111_010_00: {
                 // E8 111_010_00        nz----  2   INX         INC X               ;X=X+1
                 ++IndexX;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             }
             case 0b110_010_00: {
                 // C8 110_010_00        nz----  2   INY         INC Y               ;Y=Y+1
                 ++IndexY;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             }
             case 0b110_010_10: {
                 // CA 110_010_10        nz----  2   DEX         DEC X               ;X=X-1
                 --IndexX;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             }
             case 0b100_010_00: {
                 // 88 100_010_00        nz----  2   DEY         DEC Y               ;Y=Y-1
                 --IndexY;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             }
             case 0b111_010_10:
                 // EA 111_010_10        ------  2   NOP       NOP    ;No operation
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b000_110_00:
             case 0b001_110_00:
                 // 18        --0---  2   CLC       CLC    ;Clear carry flag            C=0
                 // 38        --1---  2   SEC       STC    ;Set carry flag              C=1
                 CarryFlag = (opcode & 0b001_000_00) != 0;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b010_110_00:
             case 0b011_110_00:
                 // 58        ---0--  2   CLI       EI     ;Clear interrupt disable bit I=0
                 // 78        ---1--  2   SEI       DI     ;Set interrupt disable bit   I=1
                 IrqDisableFlag = (opcode & 0b001_000_00) != 0;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b110_110_00:
             case 0b111_110_00:
                 // D8        ----0-  2   CLD       CLD    ;Clear decimal mode          D=0
                 // F8        ----1-  2   SED       STD    ;Set decimal mode            D=1
                 DecimalModeFlag = (opcode & 0b001_000_00) != 0;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b101_110_00:
                 // B8        -----0  2   CLV       CLV    ;Clear overflow flag         V=0
                 OverflowFlag = false;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             // Conditional Branches (conditional jump to PC=PC+/-dd)
             // 10 000_100_00 dd     ------  2** BPL nnn      JNS nnn     ;N=0 plus/positive
@@ -634,24 +555,24 @@ public sealed unsafe class Cpu : IDisposable
             case 0b010_010_00:
                 WriteMemory(StackPointerAbsolute, Accumulator);
                 --StackPointer;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b000_010_00:
                 WriteMemory(StackPointerAbsolute,
                     (byte)(ProcessorStatus | _breakFlag));
                 --StackPointer;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b011_010_00:
                 ++StackPointer;
                 Accumulator = ReadMemory(StackPointerAbsolute);
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b001_010_00:
                 ++StackPointer;
                 var ps = ReadMemory(StackPointerAbsolute);
                 ProcessorStatus = (byte)(ps & ~_breakFlag);
-                ++_pc;
+                ++ProgramCounter;
                 return;
             // Register / Immeditate to Register Transfer
             // A8 101_010_00        nz----  2   TAY         MOV Y,A             ;Y=A
@@ -663,31 +584,31 @@ public sealed unsafe class Cpu : IDisposable
             // A0 101_000_00 nn     nz----  2   LDY #nn     MOV Y,nn            ;Y=nn
             case 0b101_010_00:
                 IndexY = Accumulator;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b101_010_10:
                 IndexX = Accumulator;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b101_110_10:
                 IndexX = StackPointer;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b100_110_00:
                 Accumulator = IndexY;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b100_010_10:
                 Accumulator = IndexX;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b100_110_10:
                 StackPointer = IndexX;
-                ++_pc;
+                ++ProgramCounter;
                 return;
             case 0b101_000_00:
                 IndexY = GetImmediate8();
-                _pc += 2;
+                ProgramCounter += 2;
                 return;
             // Other Illegal Opcodes
             // 0B nn     nzc---  2  ANC #nn          AND+ASL  A=A AND nn, C=N ;bit7 to carry
@@ -698,13 +619,13 @@ public sealed unsafe class Cpu : IDisposable
             // CB nn     nzc---  2  AXS #nn          CMP+DEX  X=(X AND A)-nn
             // EB nn     nzc--v  2  SBC #nn          SBC+NOP  A=A-nn         cy?
             // BB nn nn  nz----  4* LAS nnnn,Y       LDA+TSX  A,X,S = [nnnn+Y] AND S
-            case 0x0B: InvalidOpcode(opcode); _pc += 2; return;
-            case 0x2B: InvalidOpcode(opcode); _pc += 2; return;
-            case 0x4B: InvalidOpcode(opcode); _pc += 2; return;
-            case 0x6B: InvalidOpcode(opcode); _pc += 2; return;
-            case 0xCB: InvalidOpcode(opcode); _pc += 2; return;
+            case 0x0B: InvalidOpcode(opcode); ProgramCounter += 2; return;
+            case 0x2B: InvalidOpcode(opcode); ProgramCounter += 2; return;
+            case 0x4B: InvalidOpcode(opcode); ProgramCounter += 2; return;
+            case 0x6B: InvalidOpcode(opcode); ProgramCounter += 2; return;
+            case 0xCB: InvalidOpcode(opcode); ProgramCounter += 2; return;
             //case 0xEB: InvalidOpcode(opcode); _pc += 2; return;
-            case 0xBB: InvalidOpcode(opcode); _pc += 3; return;
+            case 0xBB: InvalidOpcode(opcode); ProgramCounter += 3; return;
         }
 
         // TODO: Fix `writeAccess` argument.
@@ -712,7 +633,7 @@ public sealed unsafe class Cpu : IDisposable
 
         if (!valid)
         {
-            ++_pc;
+            ++ProgramCounter;
             return;
         }
 
