@@ -40,7 +40,7 @@ public enum NesTVSystem
     Ntsc, Pal
 }
 
-public class NesRom
+public sealed class NesRom
 {
     public int Magic { get; set; }
     public int PrgRomSize { get; set; }
@@ -50,71 +50,41 @@ public class NesRom
     public byte PrgRamSize { get; set; }
     public NesRomFlags9 Flags9 { get; set; }
     public byte Flags10 { get; set; }
-    public byte[] Reserved { get; set; }
+    public required byte[] Reserved { get; init; }
 
-    public byte[] PrgRom { get; set; }
-    public byte[] ChrRom { get; set; }
+    public required byte[] PrgRom { get; init; }
+    public required byte[] ChrRom { get; init; }
 
-    public byte Mapper =>
-        (byte)(((byte)Flags6 >> 4) | ((byte)Flags7 & 0xF0));
+    public byte Mapper => (byte)(((byte)Flags6 >> 4) | ((byte)Flags7 & 0xF0));
 
     public NesMirroringMode MirroringMode =>
         (Flags6 & NesRomFlags6.MirroringMode) != 0
             ? NesMirroringMode.Horizontal
             : NesMirroringMode.Vertical;
 
-    public static async Task<NesRom> FromFile(
-        Stream file, CancellationToken cancel)
+    private NesRom() { }
+
+    public static async Task<NesRom> FromFile(Stream file, CancellationToken cancel)
     {
         var contents = new byte[file.Length];
         await file.ReadFully(contents, 0, contents.Length, cancel);
-        var rom = new NesRom {
+        var prgSize = contents[4] * 16 * 1024;
+        var chrSize = contents[5] * 8 * 1024;
+        var rom = new NesRom
+        {
             Magic = BitConverter.ToInt32(contents, 0),
-            PrgRomSize = contents[4] * 16 * 1024,
-            ChrRomSize = contents[5] * 8 * 1024,
+            PrgRomSize = prgSize,
+            ChrRomSize = chrSize,
             Flags6 = (NesRomFlags6)contents[6],
             Flags7 = (NesRomFlags7)contents[7],
             PrgRamSize = contents[8],
             Flags9 = (NesRomFlags9)contents[9],
-            Flags10 = contents[10]
+            Flags10 = contents[10],
+            Reserved = contents.AsSpan(11, 5).ToArray(),
+            PrgRom = contents.AsSpan(16, prgSize).ToArray(),
+            ChrRom = contents.AsSpan(16 + prgSize, chrSize).ToArray(),
         };
 
-        rom.Reserved = new byte[5];
-        Buffer.BlockCopy(contents, 11, rom.Reserved, 0, 5);
-
-        rom.PrgRom = new byte[rom.PrgRomSize];
-        Buffer.BlockCopy(contents, 16, rom.PrgRom, 0, rom.PrgRomSize);
-
-        rom.ChrRom = new byte[rom.PrgRomSize];
-        Buffer.BlockCopy(contents, 16 + rom.ChrRomSize,
-            rom.ChrRom, 0, rom.ChrRomSize);
-
         return rom;
-    }
-}
-
-public static class StreamEx
-{
-    public static async Task ReadFully(
-        this Stream stream,
-        byte[] buffer, int offset, int count,
-        CancellationToken cancel)
-    {
-        var currentOffset = offset;
-        var bytesLeft = count;
-
-        while (bytesLeft > 0)
-        {
-            var bytesRead = await stream.ReadAsync(
-                buffer, currentOffset, bytesLeft, cancel);
-
-            currentOffset += bytesRead;
-            bytesLeft -= bytesRead;
-
-            if (bytesRead == 0 && bytesLeft > 0)
-            {
-                throw new EndOfStreamException();
-            }
-        }
     }
 }

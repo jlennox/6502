@@ -14,19 +14,17 @@ namespace SixFiveOhTwo;
 // * The excessive `[MethodImpl(MethodImplOptions.AggressiveInlining)]` usage was from an earlier version of .net
 //   where it was very bad about inlining properties. It's worth testing if that's still the case.
 
-[StructLayout(LayoutKind.Explicit)]
 internal struct Registers
 {
-    [FieldOffset(0)]
     public byte Accumulator;
-    [FieldOffset(1)]
     public byte IndexX;
-    [FieldOffset(2)]
     public byte IndexY;
 }
 
-public unsafe class Cpu : IDisposable
+public sealed unsafe class Cpu : IDisposable
 {
+    private const int _opcodeMask = 0b111_000_00;
+
     public static bool Trace { get; set; }
 
     private readonly Logger _log = LogManager.GetCurrentClassLogger();
@@ -235,28 +233,23 @@ public unsafe class Cpu : IDisposable
     }
     #endregion
 
-    #region ROM
+    #region Memory
     private readonly NesRom _rom;
-    private readonly byte* _prgRom;
-    private readonly int _prgRomSize;
-    #endregion
-
-    public byte* Memory;
+    private readonly PrgMemorySegment _prg;
+    private readonly byte* _memory;
     private readonly byte* _constantValues;
-
-    private const int _opcodeMask = 0b111_000_00;
+    #endregion
 
     private bool _hasDisposed = false;
 
     public Cpu(NesRom rom)
     {
-        _prgRom = Unsafe.Allocate(rom.PrgRom);
-        _prgRomSize = rom.PrgRom.Length;
+        _prg = new PrgMemorySegment(rom);
         _rom = rom;
 
         UnusedFlag = true;
 
-        Memory = Unsafe.AllocateZero(0xFFFF);
+        _memory = Unsafe.AllocateZero(0xFFFF);
 
         _constantValues = (byte*)Marshal.AllocHGlobal(0xFF);
 
@@ -277,8 +270,7 @@ public unsafe class Cpu : IDisposable
         if (Interlocked.Exchange(ref _hasDisposed, true)) return;
 
         // TODO: A bit more safety on these.
-        Marshal.FreeHGlobal((IntPtr)_prgRom);
-        Marshal.FreeHGlobal((IntPtr)Memory);
+        Marshal.FreeHGlobal((IntPtr)_memory);
         Marshal.FreeHGlobal((IntPtr)_constantValues);
         Marshal.FreeHGlobal((IntPtr)_registersPtr);
     }
@@ -309,7 +301,7 @@ public unsafe class Cpu : IDisposable
         {
             case 0b000_000_01: // [WORD[nn+X]]
             case 0b000_000_11: { // [WORD[nn+X]]
-                memory = Memory;
+                memory = _memory;
                 var srcPtr = (ushort)((GetImmediate8() + IndexX) & 0xFF);
                 ptr = ReadMemory(srcPtr);
                 ptr |= (ushort)(ReadMemory((byte)(srcPtr + 1)) << 8);
@@ -320,7 +312,7 @@ public unsafe class Cpu : IDisposable
             case 0b000_001_01: // [nn]
             case 0b000_001_10: // [nn]
             case 0b000_001_11: // [nn]
-                memory = Memory;
+                memory = _memory;
                 ptr = GetImmediate8();
                 _pc += 2;
                 break;
@@ -338,13 +330,13 @@ public unsafe class Cpu : IDisposable
             case 0b000_011_01: // [nnnn]
             case 0b000_011_10: // [nnnn]
             case 0b000_011_11: // [nnnn]
-                memory = Memory;
+                memory = _memory;
                 ptr = GetImmediate16();
                 _pc += 3;
                 break;
             case 0b000_100_01:
             case 0b000_100_11: { // [WORD[nn]+Y]
-                memory = Memory;
+                memory = _memory;
                 var srcPtr = GetImmediate8();
                 ptr = ReadMemory(srcPtr);
                 ptr |= (ushort)(ReadMemory((byte)(srcPtr + 1)) << 8);
@@ -356,13 +348,13 @@ public unsafe class Cpu : IDisposable
             case 0b000_101_01: // [nn+X]
             case 0b000_101_10: // [nn+X]
             case 0b000_101_11: // [nn+X]
-                memory = Memory;
+                memory = _memory;
                 ptr = (byte)((GetImmediate8() + switchingIndex) & 0xFF);
                 _pc += 2;
                 break;
             case 0b000_110_01:
             case 0b000_110_11:// [nnnn+Y]
-                memory = Memory;
+                memory = _memory;
                 ptr = GetImmediate16();
                 ptr = (ushort)((ptr + IndexY) & 0xFFFF);
                 _pc += 3;
@@ -371,7 +363,7 @@ public unsafe class Cpu : IDisposable
             case 0b000_111_01: // [nnnn+X]
             case 0b000_111_10:
             case 0b000_111_11:// [nnnn+X]
-                memory = Memory;
+                memory = _memory;
                 ptr = GetImmediate16();
                 ptr = (ushort)((ptr + switchingIndex) & 0xFFFF);
                 _pc += 3;
@@ -426,37 +418,7 @@ public unsafe class Cpu : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemoryUnlogged(byte* memory, ushort addr)
     {
-        /*if (address >= 0x0000 && address <= 0x07FF - offset)
-        {
-            return WorkMemory;
-        }
-        else if (address >= 0x2000 && address <= 0x2007 - offset)
-        {
-            return PpuMemory;
-        }
-        else if (address >= 0x4000 && address <= 0x4017 - offset)
-        {
-            return ApuRegisters;
-        }
-        else if (address >= 0x4018 && address <= 0x5FFF - offset)
-        {
-            return CartExpansionArea;
-        }
-        else if (address >= 0x6000 && address <= 0x7FFF - offset)
-        {
-            return CartSram;
-        }
-        else*/
-        if (addr is >= 0x8000 and <= 0xFFFF)
-        {
-            var prgMemory = _prgRom;
-            if (prgMemory == null) throw new Exception();
-
-            // This behavior is mapper dependent, but most behave that the PRG is mirrored for the PRG address space
-            // if it does not fill the full 32kb. Mirroring simulated with the modulus operation.
-            var prgAddress = (addr - 0x8000) % _prgRomSize;
-            return prgMemory[prgAddress];
-        }
+        if (_prg.TryRead(addr, out var result)) return result;
 
         return memory[addr];
     }
@@ -464,16 +426,16 @@ public unsafe class Cpu : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemory(byte* memory, ushort addr)
     {
-        if (Trace && memory == Memory) Log($"ReadMemory({addr:X4}) = {memory[addr]:X2}");
+        if (Trace && memory == _memory) Log($"ReadMemory({addr:X4}) = {memory[addr]:X2}");
 
         return ReadMemoryUnlogged(memory, addr);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public byte ReadMemory(ushort addr) => ReadMemory(Memory, addr);
+    public byte ReadMemory(ushort addr) => ReadMemory(_memory, addr);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal byte ReadMemoryUnlogged(ushort addr) => ReadMemoryUnlogged(Memory, addr);
+    internal byte ReadMemoryUnlogged(ushort addr) => ReadMemoryUnlogged(_memory, addr);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private byte ReadMemory(int addr) => ReadMemory((ushort)addr);
@@ -483,13 +445,13 @@ public unsafe class Cpu : IDisposable
     {
         if (memory == _constantValues) throw new Exception();
 
-        if (Trace && memory == Memory) Log($"WriteMemory({addr:X4}, {value:X2}) (was {memory[addr]:X2})");
+        if (Trace && memory == _memory) Log($"WriteMemory({addr:X4}, {value:X2}) (was {memory[addr]:X2})");
 
         memory[addr] = value;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void WriteMemory(ushort addr, byte value) => WriteMemory(Memory, addr, value);
+    private void WriteMemory(ushort addr, byte value) => WriteMemory(_memory, addr, value);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int ConditionalRelativeJump(bool condition)
@@ -745,7 +707,7 @@ public unsafe class Cpu : IDisposable
             case 0xBB: InvalidOpcode(opcode); _pc += 3; return;
         }
 
-        // TODO: Fix write access stuff.
+        // TODO: Fix `writeAccess` argument.
         var valid = GetPtr(opcode, out var memory, out var ptr);
 
         if (!valid)

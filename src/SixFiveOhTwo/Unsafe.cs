@@ -3,11 +3,13 @@ using System.Runtime.InteropServices;
 
 namespace SixFiveOhTwo;
 
+// Note: This was named prior to an official Unsafe existing :)
 public static unsafe class Unsafe
 {
     public static void Zero(byte* buffer, int length)
     {
-        for (var i = buffer; i < buffer + length; ++i)
+        var end = buffer + length;
+        for (var i = buffer; i < end; ++i)
         {
             i[0] = 0;
         }
@@ -23,7 +25,6 @@ public static unsafe class Unsafe
     public static byte* Allocate(byte[] source)
     {
         var buffer = (byte*)Marshal.AllocHGlobal(source.Length);
-
         fixed (byte* sourcePtr = source)
         {
             for (var i = 0; i < source.Length; ++i)
@@ -36,37 +37,12 @@ public static unsafe class Unsafe
     }
 
     public static byte* Allocate<T>()
-        where T : struct
+        where T : unmanaged
     {
-        var regSize = Marshal.SizeOf<T>();
-        var ptr = (byte*)Marshal.AllocHGlobal(regSize);
-
-        for (var i = 0; i < regSize; ++i)
-        {
-            ptr[i] = 0;
-        }
+        var size = sizeof(T);
+        var ptr = (byte*)Marshal.AllocHGlobal(size);
+        Zero(ptr, size);
 
         return ptr;
     }
 }
-
-/*public unsafe class UnsafeBuffer : IDisposable
-{
-    private byte* _buffer;
-
-    public byte this[int index]
-    {
-        get => _buffer[(int)index];
-        set => _buffer[index] = value;
-    }
-
-    public void Dispose()
-    {
-        var ptr = Interlocked.Exchange(ref _buffer, (byte*)0);
-
-        if (ptr != IntPtr.Zero)
-        {
-            Marshal.FreeHGlobal(ptr);
-        }
-    }
-}*/
